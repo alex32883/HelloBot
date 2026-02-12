@@ -1,3 +1,4 @@
+// Load environment variables (dotenv for local, process.env for Vercel)
 require('dotenv').config();
 const TelegramBot = require('node-telegram-bot-api');
 const axios = require('axios');
