@@ -1,0 +1,21 @@
+{
+  "name": "hello-telegram-bot",
+  "version": "1.0.0",
+  "description": "Простой Telegram-бот на Node.js с рандомным приветствием",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "nodejs"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "node-telegram-bot-api": "^0.66.0"
+  }
+}
+
