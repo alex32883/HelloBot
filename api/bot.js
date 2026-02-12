@@ -180,14 +180,25 @@ function setupHandlers(botInstance) {
 
 // Serverless функция для Vercel
 module.exports = async (req, res) => {
+  console.log('=== Function called ===');
+  console.log('Method:', req.method);
+  console.log('Headers:', JSON.stringify(req.headers, null, 2));
+  
   // Инициализируем бота (проверяем переменные окружения здесь)
   const currentBot = initializeBot();
   const token = process.env.BOT_TOKEN;
+  
+  console.log('Token exists:', !!token);
+  console.log('Bot initialized:', !!currentBot);
   
   // Проверяем наличие токена
   if (!token || !currentBot) {
     console.error('BOT_TOKEN не найден в переменных окружения');
     console.error('Текущие env vars:', Object.keys(process.env).filter(k => k.includes('BOT') || k.includes('WEATHER')));
+    // Для POST запросов от Telegram всегда возвращаем 200, чтобы не блокировать
+    if (req.method === 'POST') {
+      return res.status(200).json({ ok: false, error: 'BOT_TOKEN not configured' });
+    }
     return res.status(500).json({ 
       error: 'BOT_TOKEN not configured. Please add it in Vercel Dashboard → Settings → Environment Variables',
       token_configured: false
@@ -198,6 +209,11 @@ module.exports = async (req, res) => {
   // Поэтому обрабатываем асинхронно и сразу отвечаем
   if (req.method === 'POST') {
     const update = req.body;
+    
+    if (!update) {
+      console.error('No update in request body');
+      return res.status(200).json({ ok: false, error: 'No update provided' });
+    }
     
     console.log('=== Received update ===');
     console.log('Update type:', update.message ? 'message' : update.callback_query ? 'callback' : 'other');
@@ -215,10 +231,12 @@ module.exports = async (req, res) => {
       console.error('❌ Ошибка при обработке обновления:');
       console.error('Error message:', err.message);
       console.error('Error stack:', err.stack);
-      console.error('Full error:', JSON.stringify(err, Object.getOwnPropertyNames(err)));
+      if (err.response) {
+        console.error('Error response:', JSON.stringify(err.response.data, null, 2));
+      }
     });
     
-    // Сразу отвечаем Telegram, чтобы избежать таймаута
+    // Сразу отвечаем Telegram с правильным форматом
     return res.status(200).json({ ok: true });
   } else {
     // GET запрос - возвращаем информацию о статусе
