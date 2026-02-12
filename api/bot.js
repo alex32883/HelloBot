@@ -200,7 +200,7 @@ module.exports = async (req, res) => {
     if (req.method === 'GET') {
       return res.status(200).json({ 
         message: 'Telegram Bot Webhook Endpoint',
-        version: '2.1',
+        version: '2.2-FIXED',
         token_configured: !!token,
         token_length: token ? token.length : 0,
         has_weather_key: !!process.env.WEATHER_API_KEY,
