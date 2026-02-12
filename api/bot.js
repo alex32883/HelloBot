@@ -180,64 +180,85 @@ function setupHandlers(botInstance) {
 
 // Serverless функция для Vercel
 module.exports = async (req, res) => {
-  console.log('=== Function called ===');
-  console.log('Method:', req.method);
-  console.log('Headers:', JSON.stringify(req.headers, null, 2));
-  
-  // Инициализируем бота (проверяем переменные окружения здесь)
-  const currentBot = initializeBot();
-  const token = process.env.BOT_TOKEN;
-  
-  console.log('Token exists:', !!token);
-  console.log('Bot initialized:', !!currentBot);
-  
-  // Проверяем наличие токена
-  if (!token || !currentBot) {
-    console.error('BOT_TOKEN не найден в переменных окружения');
-    console.error('Текущие env vars:', Object.keys(process.env).filter(k => k.includes('BOT') || k.includes('WEATHER')));
-    // Для POST запросов от Telegram всегда возвращаем 200, чтобы не блокировать
-    if (req.method === 'POST') {
-      return res.status(200).json({ ok: false, error: 'BOT_TOKEN not configured' });
+  try {
+    console.log('=== Function called ===');
+    console.log('Method:', req.method);
+    
+    // Обработка OPTIONS для CORS (если нужно)
+    if (req.method === 'OPTIONS') {
+      return res.status(200).end();
     }
-    return res.status(500).json({ 
-      error: 'BOT_TOKEN not configured. Please add it in Vercel Dashboard → Settings → Environment Variables',
-      token_configured: false
-    });
-  }
+    
+    // Инициализируем бота (проверяем переменные окружения здесь)
+    const currentBot = initializeBot();
+    const token = process.env.BOT_TOKEN;
+    
+    console.log('Token exists:', !!token);
+    console.log('Bot initialized:', !!currentBot);
+    
+    // Для GET запросов - возвращаем информацию о статусе
+    if (req.method === 'GET') {
+      return res.status(200).json({ 
+        message: 'Telegram Bot Webhook Endpoint',
+        version: '2.1',
+        token_configured: !!token,
+        token_length: token ? token.length : 0,
+        has_weather_key: !!process.env.WEATHER_API_KEY,
+        env_keys: Object.keys(process.env).filter(k => k.includes('BOT') || k.includes('WEATHER'))
+      });
+    }
+    
+    // Проверяем наличие токена для POST запросов
+    if (!token || !currentBot) {
+      console.error('BOT_TOKEN не найден в переменных окружения');
+      console.error('Текущие env vars:', Object.keys(process.env).filter(k => k.includes('BOT') || k.includes('WEATHER')));
+      // Всегда возвращаем 200 для POST, чтобы Telegram не считал это ошибкой
+      return res.status(200).json({ ok: true, error: 'BOT_TOKEN not configured' });
+    }
 
-  // Vercel требует ответа в течение 10 секунд для бесплатного плана
-  // Поэтому обрабатываем асинхронно и сразу отвечаем
-  if (req.method === 'POST') {
-    const update = req.body;
-    
-    if (!update) {
-      console.error('No update in request body');
-      return res.status(200).json({ ok: false, error: 'No update provided' });
-    }
-    
-    console.log('=== Received update ===');
-    console.log('Update type:', update.message ? 'message' : update.callback_query ? 'callback' : 'other');
-    console.log('Update ID:', update.update_id);
-    if (update.message) {
-      console.log('Message text:', update.message.text);
-      console.log('Chat ID:', update.message.chat.id);
-    }
-    console.log('Full update:', JSON.stringify(update, null, 2));
-    
-    // Обрабатываем обновление асинхронно (не ждем завершения)
-    currentBot.processUpdate(update).then(() => {
-      console.log('✅ Update processed successfully');
-    }).catch(err => {
-      console.error('❌ Ошибка при обработке обновления:');
-      console.error('Error message:', err.message);
-      console.error('Error stack:', err.stack);
-      if (err.response) {
-        console.error('Error response:', JSON.stringify(err.response.data, null, 2));
+    // Обработка POST запросов от Telegram
+    if (req.method === 'POST') {
+      const update = req.body;
+      
+      if (!update) {
+        console.error('No update in request body');
+        return res.status(200).json({ ok: true, error: 'No update provided' });
       }
-    });
+      
+      console.log('=== Received update ===');
+      console.log('Update type:', update.message ? 'message' : update.callback_query ? 'callback' : 'other');
+      console.log('Update ID:', update.update_id);
+      if (update.message) {
+        console.log('Message text:', update.message.text);
+        console.log('Chat ID:', update.message.chat.id);
+      }
+      
+      // Обрабатываем обновление асинхронно (не ждем завершения)
+      currentBot.processUpdate(update).then(() => {
+        console.log('✅ Update processed successfully');
+      }).catch(err => {
+        console.error('❌ Ошибка при обработке обновления:');
+        console.error('Error message:', err.message);
+        console.error('Error stack:', err.stack);
+        if (err.response) {
+          console.error('Error response:', JSON.stringify(err.response.data, null, 2));
+        }
+      });
+      
+      // Сразу отвечаем Telegram с правильным форматом (всегда 200 OK)
+      return res.status(200).json({ ok: true });
+    }
     
-    // Сразу отвечаем Telegram с правильным форматом
-    return res.status(200).json({ ok: true });
+    // Для всех остальных методов
+    return res.status(405).json({ error: 'Method not allowed' });
+  } catch (error) {
+    console.error('❌ Unexpected error:', error);
+    // Всегда возвращаем 200 для POST, чтобы не блокировать Telegram
+    if (req.method === 'POST') {
+      return res.status(200).json({ ok: true, error: error.message });
+    }
+    return res.status(500).json({ error: error.message });
+  }
   } else {
     // GET запрос - возвращаем информацию о статусе
     const token = process.env.BOT_TOKEN;
