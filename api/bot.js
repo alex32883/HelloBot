@@ -6,11 +6,13 @@ const token = process.env.BOT_TOKEN;
 const weatherApiKey = process.env.WEATHER_API_KEY;
 
 if (!token) {
-  console.error('Ошибка: не задан BOT_TOKEN в файле .env');
+  console.error('Ошибка: не задан BOT_TOKEN в переменных окружения');
+  console.error('Убедитесь, что BOT_TOKEN добавлен в Vercel Dashboard → Settings → Environment Variables');
 }
 
 // Создаём бота БЕЗ polling (для webhook)
-const bot = new TelegramBot(token);
+// Если токен не найден, создаем бота с пустым токеном (будет ошибка при использовании)
+const bot = token ? new TelegramBot(token) : null;
 
 const greetings = [
   'Привет, я бот!',
@@ -142,19 +144,36 @@ bot.on('message', async (msg) => {
 
 // Serverless функция для Vercel
 module.exports = async (req, res) => {
+  // Проверяем наличие токена
+  if (!token || !bot) {
+    console.error('BOT_TOKEN не найден в переменных окружения');
+    return res.status(500).json({ 
+      error: 'BOT_TOKEN not configured. Please add it in Vercel Dashboard → Settings → Environment Variables' 
+    });
+  }
+
   // Vercel требует ответа в течение 10 секунд для бесплатного плана
   // Поэтому обрабатываем асинхронно и сразу отвечаем
   if (req.method === 'POST') {
     const update = req.body;
     
-    // Обрабатываем обновление асинхронно
-    bot.processUpdate(update).catch(err => {
+    console.log('Received update:', JSON.stringify(update, null, 2));
+    
+    try {
+      // Обрабатываем обновление асинхронно
+      await bot.processUpdate(update);
+      console.log('Update processed successfully');
+    } catch (err) {
       console.error('Ошибка при обработке обновления:', err);
-    });
+      // Все равно отвечаем OK, чтобы Telegram не повторял запрос
+    }
     
     // Сразу отвечаем Telegram, чтобы избежать таймаута
-    res.status(200).json({ ok: true });
+    return res.status(200).json({ ok: true });
   } else {
-    res.status(200).json({ message: 'Telegram Bot Webhook Endpoint' });
+    return res.status(200).json({ 
+      message: 'Telegram Bot Webhook Endpoint',
+      token_configured: !!token 
+    });
   }
 };
