@@ -3,17 +3,30 @@ require('dotenv').config();
 const TelegramBot = require('node-telegram-bot-api');
 const axios = require('axios');
 
-const token = process.env.BOT_TOKEN;
-const weatherApiKey = process.env.WEATHER_API_KEY;
+// Переменные окружения будут проверяться внутри функции
+let bot = null;
+let weatherApiKey = null;
 
-if (!token) {
-  console.error('Ошибка: не задан BOT_TOKEN в переменных окружения');
-  console.error('Убедитесь, что BOT_TOKEN добавлен в Vercel Dashboard → Settings → Environment Variables');
+// Функция для инициализации бота (вызывается при первом запросе)
+function initializeBot() {
+  if (bot) return bot; // Уже инициализирован
+  
+  const token = process.env.BOT_TOKEN;
+  weatherApiKey = process.env.WEATHER_API_KEY;
+  
+  if (!token) {
+    console.error('Ошибка: не задан BOT_TOKEN в переменных окружения');
+    console.error('Убедитесь, что BOT_TOKEN добавлен в Vercel Dashboard → Settings → Environment Variables');
+    return null;
+  }
+  
+  bot = new TelegramBot(token);
+  
+  // Регистрируем обработчики после создания бота
+  setupHandlers(bot);
+  
+  return bot;
 }
-
-// Создаём бота БЕЗ polling (для webhook)
-// Если токен не найден, создаем бота с пустым токеном (будет ошибка при использовании)
-const bot = token ? new TelegramBot(token) : null;
 
 const greetings = [
   'Привет, я бот!',
@@ -72,8 +85,10 @@ async function getWeather(city = 'Montreal') {
   }
 }
 
-// Обработчик команды /start
-bot.onText(/\/start/, (msg) => {
+// Функция для настройки обработчиков
+function setupHandlers(botInstance) {
+  // Обработчик команды /start
+  botInstance.onText(/\/start/, (msg) => {
   const chatId = msg.chat.id;
   const randomGreeting = greetings[Math.floor(Math.random() * greetings.length)];
   const randomWisdom = wisdoms[Math.floor(Math.random() * wisdoms.length)];
@@ -84,11 +99,11 @@ bot.onText(/\/start/, (msg) => {
     `💬 Общаться - просто напишите мне что-нибудь!\n\n` +
     `Попробуйте написать "погода Москва" или "/weather London"`;
   
-  bot.sendMessage(chatId, welcomeMessage);
-});
+    botInstance.sendMessage(chatId, welcomeMessage);
+  });
 
-// Обработчик команды /help
-bot.onText(/\/help/, (msg) => {
+  // Обработчик команды /help
+  botInstance.onText(/\/help/, (msg) => {
   const chatId = msg.chat.id;
   const helpMessage = `📋 Доступные команды:\n\n` +
     `/start - Начать работу с ботом\n` +
@@ -97,11 +112,11 @@ bot.onText(/\/help/, (msg) => {
     `/погода [город] - То же самое на русском\n\n` +
     `💡 Вы также можете просто написать "погода" или "weather" в сообщении!`;
   
-  bot.sendMessage(chatId, helpMessage);
-});
+    botInstance.sendMessage(chatId, helpMessage);
+  });
 
-// Обработчик команд погоды
-bot.onText(/\/weather|\/погода/, async (msg) => {
+  // Обработчик команд погоды
+  botInstance.onText(/\/weather|\/погода/, async (msg) => {
   const chatId = msg.chat.id;
   const text = msg.text;
   
@@ -109,12 +124,12 @@ bot.onText(/\/weather|\/погода/, async (msg) => {
   const cityMatch = text.match(/\/(?:weather|погода)\s+(.+)/i);
   const city = cityMatch ? cityMatch[1].trim() : 'Montreal';
   
-  const weatherInfo = await getWeather(city);
-  bot.sendMessage(chatId, weatherInfo);
-});
+    const weatherInfo = await getWeather(city);
+    botInstance.sendMessage(chatId, weatherInfo);
+  });
 
-// Обработчик всех сообщений
-bot.on('message', async (msg) => {
+  // Обработчик всех сообщений
+  botInstance.on('message', async (msg) => {
   const chatId = msg.chat.id;
   const text = msg.text ? msg.text.toLowerCase() : '';
 
@@ -130,7 +145,7 @@ bot.on('message', async (msg) => {
     const city = cityMatch ? cityMatch[1].trim() : 'Montreal';
     
     const weatherInfo = await getWeather(city);
-    bot.sendMessage(chatId, weatherInfo);
+    botInstance.sendMessage(chatId, weatherInfo);
     return;
   }
 
@@ -140,16 +155,23 @@ bot.on('message', async (msg) => {
 
   const reply = `${randomGreeting}\n\nМудрость дня: ${randomWisdom}`;
 
-  bot.sendMessage(chatId, reply);
-});
+  botInstance.sendMessage(chatId, reply);
+  });
+}
 
 // Serverless функция для Vercel
 module.exports = async (req, res) => {
+  // Инициализируем бота (проверяем переменные окружения здесь)
+  const currentBot = initializeBot();
+  const token = process.env.BOT_TOKEN;
+  
   // Проверяем наличие токена
-  if (!token || !bot) {
+  if (!token || !currentBot) {
     console.error('BOT_TOKEN не найден в переменных окружения');
+    console.error('Текущие env vars:', Object.keys(process.env).filter(k => k.includes('BOT') || k.includes('WEATHER')));
     return res.status(500).json({ 
-      error: 'BOT_TOKEN not configured. Please add it in Vercel Dashboard → Settings → Environment Variables' 
+      error: 'BOT_TOKEN not configured. Please add it in Vercel Dashboard → Settings → Environment Variables',
+      token_configured: false
     });
   }
 
@@ -162,7 +184,7 @@ module.exports = async (req, res) => {
     
     try {
       // Обрабатываем обновление асинхронно
-      await bot.processUpdate(update);
+      await currentBot.processUpdate(update);
       console.log('Update processed successfully');
     } catch (err) {
       console.error('Ошибка при обработке обновления:', err);
@@ -172,9 +194,13 @@ module.exports = async (req, res) => {
     // Сразу отвечаем Telegram, чтобы избежать таймаута
     return res.status(200).json({ ok: true });
   } else {
+    // GET запрос - возвращаем информацию о статусе
+    const token = process.env.BOT_TOKEN;
     return res.status(200).json({ 
       message: 'Telegram Bot Webhook Endpoint',
-      token_configured: !!token 
+      token_configured: !!token,
+      token_length: token ? token.length : 0,
+      has_weather_key: !!process.env.WEATHER_API_KEY
     });
   }
 };
