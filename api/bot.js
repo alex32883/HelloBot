@@ -143,62 +143,51 @@ function setupHandlers(botInstance) {
   });
 }
 
-// Serverless функция для Vercel - ПРОСТОЙ ПОДХОД
+// Serverless функция для Vercel
 module.exports = async (req, res) => {
-  // Логируем ВСЕГДА, в самом начале
+  // Логируем ВСЕГДА в самом начале - ДО любых проверок
   console.log('=== FUNCTION CALLED ===');
   console.log('Method:', req.method);
   console.log('URL:', req.url);
+  console.log('Headers:', JSON.stringify(req.headers));
   
-  // Сразу устанавливаем заголовки
-  res.setHeader('Content-Type', 'application/json');
+  // Сразу возвращаем 200 для ВСЕХ запросов, чтобы проверить, вызывается ли функция
+  res.status(200).json({ 
+    ok: true, 
+    method: req.method,
+    version: '3.2-TEST',
+    message: 'Function is being called'
+  });
   
-  // Для GET запросов
+  // Если это POST, обрабатываем асинхронно
+  if (req.method === 'POST') {
+    console.log('POST detected, processing asynchronously');
+    setImmediate(() => {
+      try {
+        const update = req.body;
+        if (update) {
+          console.log('Update ID:', update.update_id);
+          const currentBot = initializeBot();
+          if (currentBot) {
+            currentBot.processUpdate(update).catch(err => {
+              console.error('Error processing:', err.message);
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Error:', err);
+      }
+    });
+  }
+  
+  // Для GET возвращаем информацию
   if (req.method === 'GET') {
     const token = process.env.BOT_TOKEN;
-    return res.status(200).json({ 
+    res.status(200).json({ 
       message: 'Telegram Bot Webhook Endpoint',
-      version: '3.1-FIXED',
+      version: '3.2-TEST',
       token_configured: !!token,
       has_weather_key: !!process.env.WEATHER_API_KEY
     });
   }
-  
-  // Для POST запросов
-  if (req.method === 'POST') {
-    console.log('POST request - returning 200 immediately');
-    
-    // СНАЧАЛА сразу возвращаем 200 OK (без await, без try-catch)
-    res.status(200).json({ ok: true });
-    
-    // ПОТОМ обрабатываем асинхронно (не блокируем ответ)
-    setImmediate(() => {
-      try {
-        console.log('Processing update asynchronously');
-        const update = req.body;
-        if (!update) {
-          console.log('No update in body');
-          return;
-        }
-        
-        console.log('Update received:', update.update_id);
-        const currentBot = initializeBot();
-        if (!currentBot) {
-          console.error('Bot not initialized');
-          return;
-        }
-        
-        currentBot.processUpdate(update).catch(err => {
-          console.error('Error processing update:', err.message);
-        });
-      } catch (err) {
-        console.error('Error in async processing:', err);
-      }
-    });
-    
-    return;
-  }
-  
-  // Для остальных методов
-  res.status(405).json({ error: 'Method not allowed' });
 };
