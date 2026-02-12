@@ -29,7 +29,7 @@ const wisdoms = [
 ];
 
 // Функция для получения погоды
-async function getWeather(city = 'Moscow') {
+async function getWeather(city = 'Montreal') {
   if (!weatherApiKey) {
     return 'Ошибка: не задан WEATHER_API_KEY в файле .env. Получите ключ на https://openweathermap.org/api';
   }
