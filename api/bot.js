@@ -149,21 +149,29 @@ module.exports = async (req, res) => {
   console.log('=== FUNCTION CALLED ===');
   console.log('Method:', req.method);
   console.log('URL:', req.url);
-  console.log('Headers:', JSON.stringify(req.headers));
   
-  // Сразу возвращаем 200 для ВСЕХ запросов, чтобы проверить, вызывается ли функция
-  res.status(200).json({ 
-    ok: true, 
-    method: req.method,
-    version: '3.2-TEST',
-    message: 'Function is being called'
-  });
+  // Для GET запросов
+  if (req.method === 'GET') {
+    const token = process.env.BOT_TOKEN;
+    return res.status(200).json({ 
+      message: 'Telegram Bot Webhook Endpoint',
+      version: '3.3-FIXED',
+      token_configured: !!token,
+      has_weather_key: !!process.env.WEATHER_API_KEY
+    });
+  }
   
-  // Если это POST, обрабатываем асинхронно
+  // Для POST запросов
   if (req.method === 'POST') {
-    console.log('POST detected, processing asynchronously');
+    console.log('POST request received');
+    
+    // Сразу возвращаем 200 OK для Telegram
+    res.status(200).json({ ok: true });
+    
+    // Потом обрабатываем асинхронно
     setImmediate(() => {
       try {
+        console.log('Processing update asynchronously');
         const update = req.body;
         if (update) {
           console.log('Update ID:', update.update_id);
@@ -172,22 +180,20 @@ module.exports = async (req, res) => {
             currentBot.processUpdate(update).catch(err => {
               console.error('Error processing:', err.message);
             });
+          } else {
+            console.error('Bot not initialized');
           }
+        } else {
+          console.log('No update in body');
         }
       } catch (err) {
-        console.error('Error:', err);
+        console.error('Error in async processing:', err);
       }
     });
+    
+    return;
   }
   
-  // Для GET возвращаем информацию
-  if (req.method === 'GET') {
-    const token = process.env.BOT_TOKEN;
-    res.status(200).json({ 
-      message: 'Telegram Bot Webhook Endpoint',
-      version: '3.2-TEST',
-      token_configured: !!token,
-      has_weather_key: !!process.env.WEATHER_API_KEY
-    });
-  }
+  // Для остальных методов
+  res.status(405).json({ error: 'Method not allowed' });
 };
