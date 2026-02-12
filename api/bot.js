@@ -180,14 +180,15 @@ function setupHandlers(botInstance) {
 
 // Serverless функция для Vercel
 module.exports = async (req, res) => {
+  // Сразу логируем, что функция вызвана (до всего остального)
+  console.log('=== FUNCTION CALLED ===');
+  console.log('Method:', req.method);
+  console.log('URL:', req.url || 'no url');
+  
   // Сразу устанавливаем заголовки для правильного ответа
   res.setHeader('Content-Type', 'application/json');
   
   try {
-    console.log('=== Function called ===');
-    console.log('Method:', req.method);
-    console.log('URL:', req.url);
-    console.log('Headers:', JSON.stringify(req.headers, null, 2));
     
     // Обработка OPTIONS для CORS
     if (req.method === 'OPTIONS') {
@@ -213,54 +214,54 @@ module.exports = async (req, res) => {
     // Обработка POST запросов от Telegram
     if (req.method === 'POST') {
       console.log('POST request received');
-      console.log('Body type:', typeof req.body);
-      console.log('Body:', JSON.stringify(req.body, null, 2));
       
-      // Инициализируем бота
-      const currentBot = initializeBot();
-      const token = process.env.BOT_TOKEN;
-      
-      console.log('Token exists:', !!token);
-      console.log('Bot initialized:', !!currentBot);
-      
-      // Проверяем наличие токена
-      if (!token || !currentBot) {
-        console.error('BOT_TOKEN не найден');
-        const errorResponse = { ok: true, error: 'BOT_TOKEN not configured' };
-        console.log('Returning error response:', JSON.stringify(errorResponse));
-        res.status(200).json(errorResponse);
-        return;
-      }
-
-      const update = req.body;
-      
-      if (!update) {
-        console.error('No update in request body');
-        const errorResponse = { ok: true, error: 'No update provided' };
-        console.log('Returning error response:', JSON.stringify(errorResponse));
-        res.status(200).json(errorResponse);
-        return;
-      }
-      
-      console.log('=== Processing update ===');
-      console.log('Update ID:', update.update_id);
-      if (update.message) {
-        console.log('Message text:', update.message.text);
-        console.log('Chat ID:', update.message.chat.id);
-      }
-      
-      // Обрабатываем обновление асинхронно (не ждем завершения)
-      currentBot.processUpdate(update).then(() => {
-        console.log('✅ Update processed successfully');
-      }).catch(err => {
-        console.error('❌ Error processing update:', err.message);
-        console.error('Stack:', err.stack);
-      });
-      
-      // Сразу отвечаем Telegram (всегда 200 OK)
+      // СНАЧАЛА отвечаем Telegram (всегда 200 OK), чтобы избежать таймаута
       const successResponse = { ok: true };
-      console.log('Returning success response:', JSON.stringify(successResponse));
+      console.log('Returning success response immediately');
       res.status(200).json(successResponse);
+      
+      // ПОТОМ обрабатываем обновление асинхронно
+      try {
+        console.log('Body type:', typeof req.body);
+        console.log('Body:', JSON.stringify(req.body, null, 2));
+        
+        const update = req.body;
+        
+        if (!update) {
+          console.error('No update in request body');
+          return;
+        }
+        
+        // Инициализируем бота
+        const currentBot = initializeBot();
+        const token = process.env.BOT_TOKEN;
+        
+        console.log('Token exists:', !!token);
+        console.log('Bot initialized:', !!currentBot);
+        
+        if (!token || !currentBot) {
+          console.error('BOT_TOKEN не найден');
+          return;
+        }
+        
+        console.log('=== Processing update ===');
+        console.log('Update ID:', update.update_id);
+        if (update.message) {
+          console.log('Message text:', update.message.text);
+          console.log('Chat ID:', update.message.chat.id);
+        }
+        
+        // Обрабатываем обновление асинхронно
+        currentBot.processUpdate(update).then(() => {
+          console.log('✅ Update processed successfully');
+        }).catch(err => {
+          console.error('❌ Error processing update:', err.message);
+          console.error('Stack:', err.stack);
+        });
+      } catch (processError) {
+        console.error('❌ Error in async processing:', processError);
+      }
+      
       return;
     }
     
