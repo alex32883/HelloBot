@@ -87,32 +87,45 @@ async function getWeather(city = 'Montreal') {
 
 // Функция для настройки обработчиков
 function setupHandlers(botInstance) {
+  console.log('Setting up bot handlers...');
+  
   // Обработчик команды /start
   botInstance.onText(/\/start/, (msg) => {
-  const chatId = msg.chat.id;
-  const randomGreeting = greetings[Math.floor(Math.random() * greetings.length)];
-  const randomWisdom = wisdoms[Math.floor(Math.random() * wisdoms.length)];
-  
-  const welcomeMessage = `${randomGreeting}\n\nМудрость дня: ${randomWisdom}\n\n` +
-    `Я умею:\n` +
-    `🌤️ Показывать погоду - напишите "погода" или используйте команды /weather или /погода\n` +
-    `💬 Общаться - просто напишите мне что-нибудь!\n\n` +
-    `Попробуйте написать "погода Москва" или "/weather London"`;
-  
-    botInstance.sendMessage(chatId, welcomeMessage);
+    console.log('✅ /start command received!');
+    const chatId = msg.chat.id;
+    console.log('Chat ID:', chatId);
+    
+    const randomGreeting = greetings[Math.floor(Math.random() * greetings.length)];
+    const randomWisdom = wisdoms[Math.floor(Math.random() * wisdoms.length)];
+    
+    const welcomeMessage = `${randomGreeting}\n\nМудрость дня: ${randomWisdom}\n\n` +
+      `Я умею:\n` +
+      `🌤️ Показывать погоду - напишите "погода" или используйте команды /weather или /погода\n` +
+      `💬 Общаться - просто напишите мне что-нибудь!\n\n` +
+      `Попробуйте написать "погода Москва" или "/weather London"`;
+    
+    console.log('Sending welcome message...');
+    botInstance.sendMessage(chatId, welcomeMessage).then(() => {
+      console.log('✅ Welcome message sent successfully');
+    }).catch(err => {
+      console.error('❌ Error sending welcome message:', err);
+    });
   });
 
   // Обработчик команды /help
   botInstance.onText(/\/help/, (msg) => {
-  const chatId = msg.chat.id;
-  const helpMessage = `📋 Доступные команды:\n\n` +
-    `/start - Начать работу с ботом\n` +
-    `/help - Показать эту справку\n` +
-    `/weather [город] - Погода в указанном городе (по умолчанию Montreal)\n` +
-    `/погода [город] - То же самое на русском\n\n` +
-    `💡 Вы также можете просто написать "погода" или "weather" в сообщении!`;
-  
-    botInstance.sendMessage(chatId, helpMessage);
+    console.log('✅ /help command received!');
+    const chatId = msg.chat.id;
+    const helpMessage = `📋 Доступные команды:\n\n` +
+      `/start - Начать работу с ботом\n` +
+      `/help - Показать эту справку\n` +
+      `/weather [город] - Погода в указанном городе (по умолчанию Montreal)\n` +
+      `/погода [город] - То же самое на русском\n\n` +
+      `💡 Вы также можете просто написать "погода" или "weather" в сообщении!`;
+    
+    botInstance.sendMessage(chatId, helpMessage).catch(err => {
+      console.error('❌ Error sending help message:', err);
+    });
   });
 
   // Обработчик команд погоды
@@ -130,13 +143,15 @@ function setupHandlers(botInstance) {
 
   // Обработчик всех сообщений
   botInstance.on('message', async (msg) => {
-  const chatId = msg.chat.id;
-  const text = msg.text ? msg.text.toLowerCase() : '';
+    console.log('✅ Message received:', msg.text);
+    const chatId = msg.chat.id;
+    const text = msg.text ? msg.text.toLowerCase() : '';
 
-  // Проверяем, не является ли это командой
-  if (msg.text && msg.text.startsWith('/')) {
-    return; // Команды обрабатываются отдельно
-  }
+    // Проверяем, не является ли это командой
+    if (msg.text && msg.text.startsWith('/')) {
+      console.log('Message is a command, skipping general handler');
+      return; // Команды обрабатываются отдельно
+    }
 
   // Проверяем, содержит ли сообщение запрос о погоде
   if (text.includes('погода') || text.includes('weather') || text.includes('температура')) {
@@ -155,8 +170,12 @@ function setupHandlers(botInstance) {
 
   const reply = `${randomGreeting}\n\nМудрость дня: ${randomWisdom}`;
 
-  botInstance.sendMessage(chatId, reply);
+  botInstance.sendMessage(chatId, reply).catch(err => {
+    console.error('❌ Error sending message:', err);
   });
+  });
+  
+  console.log('✅ All handlers set up successfully');
 }
 
 // Serverless функция для Vercel
@@ -180,16 +199,24 @@ module.exports = async (req, res) => {
   if (req.method === 'POST') {
     const update = req.body;
     
-    console.log('Received update:', JSON.stringify(update, null, 2));
-    
-    try {
-      // Обрабатываем обновление асинхронно
-      await currentBot.processUpdate(update);
-      console.log('Update processed successfully');
-    } catch (err) {
-      console.error('Ошибка при обработке обновления:', err);
-      // Все равно отвечаем OK, чтобы Telegram не повторял запрос
+    console.log('=== Received update ===');
+    console.log('Update type:', update.message ? 'message' : update.callback_query ? 'callback' : 'other');
+    console.log('Update ID:', update.update_id);
+    if (update.message) {
+      console.log('Message text:', update.message.text);
+      console.log('Chat ID:', update.message.chat.id);
     }
+    console.log('Full update:', JSON.stringify(update, null, 2));
+    
+    // Обрабатываем обновление асинхронно (не ждем завершения)
+    currentBot.processUpdate(update).then(() => {
+      console.log('✅ Update processed successfully');
+    }).catch(err => {
+      console.error('❌ Ошибка при обработке обновления:');
+      console.error('Error message:', err.message);
+      console.error('Error stack:', err.stack);
+      console.error('Full error:', JSON.stringify(err, Object.getOwnPropertyNames(err)));
+    });
     
     // Сразу отвечаем Telegram, чтобы избежать таймаута
     return res.status(200).json({ ok: true });
