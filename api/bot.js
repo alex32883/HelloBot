@@ -259,16 +259,4 @@ module.exports = async (req, res) => {
     }
     return res.status(500).json({ error: error.message });
   }
-  } else {
-    // GET запрос - возвращаем информацию о статусе
-    const token = process.env.BOT_TOKEN;
-    return res.status(200).json({ 
-      message: 'Telegram Bot Webhook Endpoint',
-      version: '2.0',
-      token_configured: !!token,
-      token_length: token ? token.length : 0,
-      has_weather_key: !!process.env.WEATHER_API_KEY,
-      env_keys: Object.keys(process.env).filter(k => k.includes('BOT') || k.includes('WEATHER'))
-    });
-  }
 };
